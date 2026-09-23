@@ -10,3 +10,4 @@ venv/
 .pytest_cache/
 .mypy_cache/
 *.log
+k8s/secret.yaml
