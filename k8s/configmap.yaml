@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: oms1-config
+  namespace: oms
+data:
+  SERVICE_NAME: OMS1
+  ROOT_PATH: /oms1
+  KAFKA_BOOTSTRAP_SERVERS: kafka.oms.svc.cluster.local:9092
+  ACCESS_TOKEN_EXPIRE_MINUTES: "60"
