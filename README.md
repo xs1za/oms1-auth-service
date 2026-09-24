@@ -171,13 +171,17 @@ kubectl apply -f k8s/
 kubectl -n oms get pods -l app=oms1
 ```
 
-При установленном Ingress из `platform/k8s/ingress.yaml` встроенный Swagger UI OMS1 доступен без port-forward:
+Для локального доступа:
 
-```text
-http://oms.local/oms1/docs
+```bash
+kubectl -n oms port-forward svc/oms1 8001:80
 ```
 
-Если Ingress недоступен, для отладки можно использовать `kubectl -n oms port-forward svc/oms1 8001:80` и открыть `http://localhost:8001/docs`.
+После port-forward встроенный Swagger UI OMS1 доступен по адресу:
+
+```text
+http://localhost:8001/docs
+```
 
 ## Важно для production
 
