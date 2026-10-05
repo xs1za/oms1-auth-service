@@ -182,10 +182,3 @@ kubectl -n oms port-forward svc/oms1 8001:80
 ```text
 http://localhost:8001/docs
 ```
-
-## Важно для production
-
-- Заменить in-memory пользователей и сервисных клиентов на БД.
-- Вынести сервисные секреты в Kubernetes Secret или внешний secret manager.
-- Использовать разные JWT-секреты для сред разработки, тестирования и production.
-- Добавить refresh-token flow и ротацию ключей.
