@@ -17,6 +17,9 @@
 - Uvicorn
 - python-jose
 - passlib bcrypt
+- SQLAlchemy
+- Alembic
+- PostgreSQL
 - confluent-kafka
 
 ## API
@@ -110,6 +113,38 @@ Authorization: Bearer <token>
 | `JWT_ALGORITHM` | `HS256` | Алгоритм JWT |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | `60` | Время жизни токена |
 | `KAFKA_BOOTSTRAP_SERVERS` | `kafka.oms.svc.cluster.local:9092` | Kafka bootstrap servers |
+| `DATABASE_URL` | `postgresql+psycopg://oms1@oms1-postgres.oms.svc.cluster.local:5432/oms1` | PostgreSQL connection URL. В k8s задается через Secret-backed env |
+| `ADMIN_INITIAL_PASSWORD` | _нет_ | Начальный пароль `admin` для seed, не хранить в Git |
+| `OMS2_SERVICE_SECRET` | _нет_ | Service secret `OMS2` для seed, не хранить в Git |
+| `OMS3_SERVICE_SECRET` | _нет_ | Service secret `OMS3` для seed, не хранить в Git |
+| `OMS4_SERVICE_SECRET` | _нет_ | Service secret `OMS4` для seed, не хранить в Git |
+| `OMS5_SERVICE_SECRET` | _нет_ | Service secret `OMS5` для seed, не хранить в Git |
+
+## PostgreSQL storage
+
+`OMS1` хранит пользователей и service clients в PostgreSQL. Таблицы создаются Alembic migration:
+
+```bash
+alembic upgrade head
+```
+
+Начальные auth-данные создаются явной seed-командой:
+
+```bash
+python -m app.seed
+```
+
+Seed создает пользователя `admin` и service clients `OMS2`, `OMS3`, `OMS4`, `OMS5`. Пароли и service secrets берутся только из env-переменных и сохраняются в БД только в виде hash.
+
+В Kubernetes PostgreSQL запускается отдельным workload/service `oms1-postgres`, не sidecar-контейнером в pod приложения `OMS1`. Данные локального kind-окружения сохраняются через PV/PVC в host-каталог:
+
+```text
+D:/ProjectsDocker/extrawork/.runtime/oms1-postgres-data
+```
+
+Если эту папку не удалять, данные сохраняются после перезагрузки компьютера или Docker Desktop. Восстановление окружения выполняется по `platform/docs/K8S_FULL_SETUP.md`, пункт 17.
+
+Перед применением manifests создать реальный Kubernetes Secret `oms1-secret` из непубличных значений. Файл `k8s/secret.example.yaml` содержит только пример и использует имя `oms1-secret-example`, чтобы `kubectl apply -f k8s/` не перезаписывал runtime Secret.
 
 ## Локальный запуск
 
@@ -117,6 +152,8 @@ Authorization: Bearer <token>
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
+alembic upgrade head
+python -m app.seed
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
 ```
 
@@ -167,6 +204,7 @@ docker run --rm -p 8001:8000 -e JWT_SECRET_KEY=dev-secret oms1:latest
 
 ```bash
 kubectl apply -f ../platform/k8s/namespace.yaml
+kubectl -n oms create secret generic oms1-secret --from-env-file .env.k8s --dry-run=client -o yaml | kubectl apply -f -
 kubectl apply -f k8s/
 kubectl -n oms get pods -l app=oms1
 ```

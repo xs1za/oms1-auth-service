@@ -5,6 +5,7 @@ from fastapi import APIRouter, status
 from fastapi.responses import JSONResponse
 
 from app.settings import settings
+from app.database import check_database
 
 router = APIRouter(prefix="/health", tags=["healthcheck"])
 
@@ -37,6 +38,7 @@ def live() -> dict:
 def ready() -> JSONResponse:
     checks = {
         "jwt_config": {"status": "ok" if settings.jwt_secret_key else "failed"},
+        "postgres": check_database(),
         "kafka": check_tcp_endpoint(settings.kafka_bootstrap_servers),
     }
     ready_status = "ok" if all(check["status"] == "ok" for check in checks.values()) else "failed"

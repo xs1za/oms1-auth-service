@@ -1,0 +1,79 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: oms1-postgres-data-pv
+spec:
+  capacity:
+    storage: 2Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: oms1-local
+  hostPath:
+    path: /mnt/oms-data/oms1-postgres-data
+    type: DirectoryOrCreate
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oms1-postgres
+  namespace: oms
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: oms1-postgres
+  template:
+    metadata:
+      labels:
+        app: oms1-postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16.4-bookworm
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: oms1
+            - name: POSTGRES_USER
+              value: oms1
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: oms1-secret
+                  key: POSTGRES_PASSWORD
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: oms1-postgres-data
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: oms1-postgres-data
+  namespace: oms
+spec:
+  volumeName: oms1-postgres-data-pv
+  storageClassName: oms1-local
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: oms1-postgres
+  namespace: oms
+spec:
+  selector:
+    app: oms1-postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432

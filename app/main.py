@@ -6,9 +6,12 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
+from app.database import get_db
 from app.kafka import publish_event
 from app.healthcheck.router import router as healthcheck_router
+from app.models import ServiceClient, User
 from app.settings import settings
 
 app = FastAPI(title="OMS1 Auth Service", version="0.1.0", root_path=settings.root_path)
@@ -22,21 +25,6 @@ app.add_middleware(
 app.include_router(healthcheck_router)
 security = HTTPBearer()
 password_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-# Стартовое in-memory хранилище. Для production заменить на БД и миграции.
-users = {
-    "admin": {
-        "username": "admin",
-        "password_hash": password_context.hash("admin"),
-        "scopes": ["users", "services", "employees", "reports", "notifications", "operations"],
-    }
-}
-service_clients = {
-    "OMS2": {"secret": "oms2-secret", "scopes": ["auth.verify", "employees"]},
-    "OMS3": {"secret": "oms3-secret", "scopes": ["auth.verify", "reports"]},
-    "OMS4": {"secret": "oms4-secret", "scopes": ["auth.verify", "notifications"]},
-    "OMS5": {"secret": "oms5-secret", "scopes": ["auth.verify", "operations"]},
-}
 
 
 class UserLogin(BaseModel):
@@ -70,21 +58,21 @@ def decode_token(credentials: HTTPAuthorizationCredentials = Depends(security)) 
 
 
 @app.post("/auth/token", response_model=TokenResponse)
-def login(payload: UserLogin) -> TokenResponse:
-    user = users.get(payload.username)
-    if not user or not password_context.verify(payload.password, user["password_hash"]):
+def login(payload: UserLogin, db: Session = Depends(get_db)) -> TokenResponse:
+    user = db.query(User).filter(User.username == payload.username).one_or_none()
+    if not user or not user.is_active or not password_context.verify(payload.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
-    token = create_token(payload.username, "user", user["scopes"])
+    token = create_token(payload.username, "user", user.scopes)
     publish_event("auth.user_logged_in", {"username": payload.username, "at": datetime.now(timezone.utc)})
     return token
 
 
 @app.post("/auth/service-token", response_model=TokenResponse)
-def service_login(payload: ServiceLogin) -> TokenResponse:
-    client = service_clients.get(payload.client_id)
-    if not client or client["secret"] != payload.client_secret:
+def service_login(payload: ServiceLogin, db: Session = Depends(get_db)) -> TokenResponse:
+    client = db.query(ServiceClient).filter(ServiceClient.client_id == payload.client_id).one_or_none()
+    if not client or not client.is_active or not password_context.verify(payload.client_secret, client.secret_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid service credentials")
-    token = create_token(payload.client_id, "service", client["scopes"])
+    token = create_token(payload.client_id, "service", client.scopes)
     publish_event("auth.service_token_issued", {"client_id": payload.client_id, "at": datetime.now(timezone.utc)})
     return token
 

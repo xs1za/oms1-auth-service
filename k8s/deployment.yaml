@@ -13,6 +13,29 @@ spec:
       labels:
         app: oms1
     spec:
+      initContainers:
+        - name: migrate-and-seed
+          image: oms1:latest
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c"]
+          args:
+            - |
+              python -m app.wait_for_postgres
+              alembic upgrade head
+              python -m app.seed
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: oms1-secret
+                  key: POSTGRES_PASSWORD
+            - name: DATABASE_URL
+              value: postgresql+psycopg://oms1:$(POSTGRES_PASSWORD)@oms1-postgres.oms.svc.cluster.local:5432/oms1
+          envFrom:
+            - configMapRef:
+                name: oms1-config
+            - secretRef:
+                name: oms1-secret
       containers:
         - name: oms1
           image: oms1:latest
@@ -24,6 +47,14 @@ spec:
                 name: oms1-config
             - secretRef:
                 name: oms1-secret
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: oms1-secret
+                  key: POSTGRES_PASSWORD
+            - name: DATABASE_URL
+              value: postgresql+psycopg://oms1:$(POSTGRES_PASSWORD)@oms1-postgres.oms.svc.cluster.local:5432/oms1
           readinessProbe:
             httpGet:
               path: /health/ready
