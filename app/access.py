@@ -5,7 +5,14 @@ from datetime import datetime, timezone
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.models import AccessRoleAssignment, ServiceClient, User
+from app.models import (
+    AccessRoleAssignment,
+    ExternalOrganizationMembership,
+    OperatorEmploymentPeriod,
+    OperatorPositionAssignment,
+    ServiceClient,
+    User,
+)
 
 OPERATOR_ROLES = {"manager", "supervisor", "administrator"}
 EXTERNAL_ROLE = "external_user"
@@ -44,10 +51,29 @@ def roles_for(db: Session, user: User) -> list[str]:
     return sorted({assignment.role_code for assignment in active_assignments(db, user.id)})
 
 
+def membership_active_at(membership: ExternalOrganizationMembership, at: datetime) -> bool:
+    moment = as_aware(at)
+    if membership.status != "active":
+        return False
+    if as_aware(membership.valid_from) > moment:
+        return False
+    return membership.valid_to is None or as_aware(membership.valid_to) > moment
+
+
 def external_organization_id(db: Session, user: User) -> str | None:
-    for assignment in active_assignments(db, user.id):
-        if assignment.role_code == EXTERNAL_ROLE:
-            return assignment.organization_id
+    moment = utcnow()
+    for assignment in active_assignments(db, user.id, moment):
+        if assignment.role_code != EXTERNAL_ROLE or not assignment.membership_id:
+            continue
+        membership = (
+            db.query(ExternalOrganizationMembership)
+            .filter(ExternalOrganizationMembership.id == assignment.membership_id)
+            .one_or_none()
+        )
+        if membership is None or membership.user_id != user.id:
+            continue
+        if membership_active_at(membership, moment):
+            return membership.organization_id
     return None
 
 
@@ -72,6 +98,12 @@ def decimal_id(value) -> str | None:
 def parse_decimal(value, field: str):
     if value is None:
         return None
+    if isinstance(value, bool):
+        raise api_error(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "validation_error",
+            f"{field} must be a decimal BIGINT string",
+        )
     try:
         parsed = int(value)
     except (TypeError, ValueError):
@@ -81,7 +113,52 @@ def parse_decimal(value, field: str):
     return parsed
 
 
-def serialize_assignment(assignment: AccessRoleAssignment, user: User | None = None) -> dict:
+def iso(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    return as_aware(value).astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def serialize_position_assignment(assignment: OperatorPositionAssignment) -> dict:
+    return {
+        "operator_position_assignment_id": assignment.id,
+        "position_code": assignment.position_code,
+        "status": assignment.status,
+        "starts_at": iso(assignment.starts_at),
+        "ends_at": iso(assignment.ends_at),
+    }
+
+
+def serialize_operator_employment_period(
+    period: OperatorEmploymentPeriod, assignment: OperatorPositionAssignment | None
+) -> dict:
+    return {
+        "operator_employment_period_id": period.id,
+        "user_id": period.user_id,
+        "status": period.status,
+        "starts_at": iso(period.starts_at),
+        "ends_at": iso(period.ends_at),
+        "personnel_number": period.personnel_number,
+        "position_assignment": serialize_position_assignment(assignment) if assignment is not None else None,
+        "created_at": iso(period.created_at),
+    }
+
+
+def serialize_external_membership(membership: ExternalOrganizationMembership) -> dict:
+    return {
+        "membership_id": membership.id,
+        "user_id": membership.user_id,
+        "organization_id": membership.organization_id,
+        "status": membership.status,
+        "valid_from": iso(membership.valid_from),
+        "valid_to": iso(membership.valid_to),
+        "created_at": iso(membership.created_at),
+    }
+
+
+def serialize_assignment(
+    assignment: AccessRoleAssignment, user: User | None = None, organization_id: str | None = None
+) -> dict:
     return {
         "assignment_id": assignment.id,
         "user_id": assignment.user_id,
@@ -90,16 +167,10 @@ def serialize_assignment(assignment: AccessRoleAssignment, user: User | None = N
         "status": assignment.status,
         "valid_from": iso(assignment.valid_from),
         "valid_to": iso(assignment.valid_to),
-        "employment_episode_id": decimal_id(assignment.employment_episode_id),
-        "position_assignment_id": decimal_id(assignment.position_assignment_id),
-        "organization_id": assignment.organization_id,
+        "operator_employment_period_id": assignment.operator_employment_period_id,
+        "operator_position_assignment_id": assignment.operator_position_assignment_id,
+        "organization_id": organization_id,
     }
-
-
-def iso(value: datetime | None) -> str | None:
-    if value is None:
-        return None
-    return as_aware(value).astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def assignable_user(db: Session, user_id: str) -> User:
@@ -108,6 +179,13 @@ def assignable_user(db: Session, user_id: str) -> User:
         raise api_error(status.HTTP_404_NOT_FOUND, "user_not_found", "User was not found")
     if user.merged_into_user_id is not None or not user.is_active:
         raise api_error(status.HTTP_409_CONFLICT, "person_account_conflict", "User is not an active canonical account")
+    return user
+
+
+def active_user(db: Session, user_id: str) -> User:
+    user = db.query(User).filter(User.id == user_id).one_or_none()
+    if user is None or user.merged_into_user_id is not None or not user.is_active:
+        raise api_error(status.HTTP_404_NOT_FOUND, "user_not_found", "User was not found")
     return user
 
 
