@@ -144,7 +144,7 @@ D:/ProjectsDocker/extrawork/.runtime/oms1-postgres-data
 
 Если эту папку не удалять, данные сохраняются после перезагрузки компьютера или Docker Desktop. Восстановление окружения выполняется по `platform/docs/K8S_FULL_SETUP.md`, пункт 17.
 
-Перед применением manifests создать реальный Kubernetes Secret `oms1-secret` из непубличных значений. Файл `k8s/secret.example.yaml` содержит только пример и использует имя `oms1-secret-example`, чтобы `kubectl apply -f k8s/` не перезаписывал runtime Secret.
+Перед применением manifests создать реальный Kubernetes Secret `oms1-secret` из значений `.env.k8s.oms1` по инструкции `platform/docs/K8S_FULL_SETUP.md`. Secret-файлы с паролями не хранятся в репозитории.
 
 ## Локальный запуск
 
