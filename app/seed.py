@@ -1,11 +1,12 @@
 import logging
+from datetime import datetime, timezone
 from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
 from app.main import password_context
-from app.models import ServiceClient, User
+from app.models import AccessRoleAssignment, ServiceClient, User
 from app.settings import settings
 
 
@@ -29,18 +30,43 @@ def require_secret(value: str | None, name: str) -> str:
 def seed_auth_data(db: Session) -> dict[str, int]:
     created_users = 0
     created_service_clients = 0
+    created_assignments = 0
 
-    if db.query(User).filter(User.username == "admin").one_or_none() is None:
+    admin = db.query(User).filter(User.username == "admin").one_or_none()
+    if admin is None:
         admin_password = require_secret(settings.admin_initial_password, "ADMIN_INITIAL_PASSWORD")
+        admin = User(
+            id=str(uuid4()),
+            username="admin",
+            password_hash=password_context.hash(admin_password),
+            scopes=ADMIN_SCOPES,
+            display_name="Administrator",
+        )
+        db.add(admin)
+        db.flush()
+        created_users += 1
+
+    active_admin_assignment = (
+        db.query(AccessRoleAssignment)
+        .filter(
+            AccessRoleAssignment.user_id == admin.id,
+            AccessRoleAssignment.role_code == "administrator",
+            AccessRoleAssignment.status == "active",
+        )
+        .one_or_none()
+    )
+    if active_admin_assignment is None:
         db.add(
-            User(
+            AccessRoleAssignment(
                 id=str(uuid4()),
-                username="admin",
-                password_hash=password_context.hash(admin_password),
-                scopes=ADMIN_SCOPES,
+                user_id=admin.id,
+                role_code="administrator",
+                valid_from=datetime.now(timezone.utc),
+                status="active",
+                reason="Bootstrap administrator assignment",
             )
         )
-        created_users += 1
+        created_assignments += 1
 
     for client_id, (secret, scopes) in SERVICE_CLIENTS.items():
         if db.query(ServiceClient).filter(ServiceClient.client_id == client_id).one_or_none() is not None:
@@ -58,7 +84,7 @@ def seed_auth_data(db: Session) -> dict[str, int]:
         created_service_clients += 1
 
     db.commit()
-    return {"users": created_users, "service_clients": created_service_clients}
+    return {"users": created_users, "service_clients": created_service_clients, "assignments": created_assignments}
 
 
 def main() -> None:
@@ -66,9 +92,10 @@ def main() -> None:
     with SessionLocal() as db:
         result = seed_auth_data(db)
     logger.info(
-        "Seeded OMS1 auth data: users=%s service_clients=%s",
+        "Seeded OMS1 auth data: users=%s service_clients=%s assignments=%s",
         result["users"],
         result["service_clients"],
+        result["assignments"],
     )
 
 
