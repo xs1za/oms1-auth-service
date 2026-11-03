@@ -9,6 +9,9 @@
 - Выпуск JWT access token для микросервисов `OMS2`, `OMS3`, `OMS4`, `OMS5`.
 - Проверка JWT-токена через endpoint `/auth/verify`.
 - Публикация событий авторизации в Kafka.
+- Хранение ролей, сроков работы операторов и внешних членств.
+- Связь учетной записи с person_id и применение изменений из OMS2.
+- Отзыв токенов после изменения ролей и доступа.
 
 ## Технологии
 
@@ -51,7 +54,7 @@ Content-Type: application/json
 ```json
 {
   "username": "admin",
-  "password": "admin"
+  "password": "replace-with-ADMIN_INITIAL_PASSWORD"
 }
 ```
 
@@ -77,7 +80,7 @@ Content-Type: application/json
 ```json
 {
   "client_id": "OMS2",
-  "client_secret": "oms2-secret"
+  "client_secret": "replace-with-OMS2_SERVICE_SECRET"
 }
 ```
 
@@ -99,10 +102,19 @@ Authorization: Bearer <token>
 }
 ```
 
+Для пользовательского токена /auth/verify также возвращает user_id, person_id, display_name, roles, organization_id и auth_version. Для service token ответ содержит scopes.
+
 ## Kafka events
 
-- `auth.user_logged_in` - пользователь успешно получил токен.
-- `auth.service_token_issued` - микросервис получил сервисный токен.
+Публикует OMS1:
+
+- auth.user_logged_in - пользователь получил access token.
+- auth.service_token_issued - выпущен токен сервиса.
+
+Читает от OMS2:
+
+- people.access.v1: people.identity.changed обновляет имя связанной учетной записи; people.merged объединяет связи пользователей.
+- Consumer group: oms1.people.access. OMS1 хранит inbox и последнюю aggregate_version для защиты от дублей и пропусков.
 
 ## Переменные окружения
 
@@ -122,7 +134,7 @@ Authorization: Bearer <token>
 
 ## PostgreSQL storage
 
-`OMS1` хранит пользователей и service clients в PostgreSQL. Таблицы создаются Alembic migration:
+`OMS1` хранит пользователей, service clients, назначения ролей, периоды работы операторов и внешние членства в PostgreSQL. Таблицы создаются Alembic migrations:
 
 ```bash
 alembic upgrade head

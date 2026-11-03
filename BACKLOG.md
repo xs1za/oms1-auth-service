@@ -1,7 +1,4 @@
 # OMS1 Backlog
 
-- Заменить in-memory пользователей и сервисных клиентов на постоянное хранилище с миграциями.
-- Добавить модель пользователей, ролей и связь `user -> employee_id` для интеграции с `OMS2.Employee`.
-- Вынести сервисные секреты и JWT-ключи в Kubernetes Secret или внешний secret manager.
-- Использовать разные JWT-ключи для dev/test/prod и добавить ротацию ключей.
-- Добавить refresh-token flow, отзыв токенов и аудит auth-событий.
+- Разделить JWT signing keys для dev/test/prod и добавить ротацию ключей.
+- Добавить refresh-token flow.
