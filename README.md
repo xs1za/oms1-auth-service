@@ -1,4 +1,4 @@
-# OMS1 Auth Service
+# OMS1 auth service
 
 `OMS1` - микросервис авторизации. Он отвечает за выпуск и проверку JWT-токенов для пользователей и для межсервисного взаимодействия.
 
@@ -154,7 +154,7 @@ Seed создает пользователя `admin` и service clients `OMS2`, 
 D:/ProjectsDocker/extrawork/.runtime/oms1-postgres-data
 ```
 
-Если эту папку не удалять, данные сохраняются после перезагрузки компьютера или Docker Desktop. Восстановление окружения выполняется по `platform/docs/K8S_FULL_SETUP.md`, пункт 17.
+Если эту папку не удалять, данные сохраняются после перезагрузки компьютера или Docker Desktop. Восстановление окружения выполняется по `platform/docs/K8S_FULL_SETUP.md`, пункт 16.
 
 Перед применением manifests создать реальный Kubernetes Secret `oms1-secret` из значений `.env.k8s.oms1` по инструкции `platform/docs/K8S_FULL_SETUP.md`. Secret-файлы с паролями не хранятся в репозитории.
 
