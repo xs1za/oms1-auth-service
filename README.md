@@ -178,7 +178,8 @@ http://localhost:8001/docs
 Это Swagger только текущего сервиса OMS1. Общая Swagger UI страница для единой спецификации `platform/contracts/openapi_oms_microservices.json` запускается отдельно из корня проекта и открывается без `/docs`:
 
 ```powershell
-docker run --rm `
+docker rm -f oms-swagger-ui 2>$null
+docker run -d --rm `
   --name oms-swagger-ui `
   -p 8088:8080 `
   -e SWAGGER_JSON=/spec/platform/contracts/openapi_oms_microservices.json `
@@ -192,7 +193,7 @@ http://localhost:8088
 
 Если нужен порт `8001` именно для общей Swagger UI страницы, освободите этот порт от OMS1 и запустите контейнер с `-p 8001:8080`. URL будет `http://localhost:8001`, не `http://localhost:8001/docs`.
 
-Через Ingress сервис доступен без port-forward. Встроенный Swagger UI OMS1:
+Через Gateway сервис доступен без port-forward. Встроенный Swagger UI OMS1:
 
 ```text
 http://oms.local/oms1/docs
